@@ -12,16 +12,19 @@ import org.hyperledger.fabric.gateway.DefaultCommitHandlers;
 import org.hyperledger.fabric.gateway.DefaultQueryHandlers;
 import org.hyperledger.fabric.gateway.Gateway;
 import org.hyperledger.fabric.gateway.GatewayRuntimeException;
+import org.hyperledger.fabric.gateway.IdemixIdentity;
 import org.hyperledger.fabric.gateway.Identities;
 import org.hyperledger.fabric.gateway.Identity;
 import org.hyperledger.fabric.gateway.Network;
 import org.hyperledger.fabric.gateway.Wallet;
 import org.hyperledger.fabric.gateway.X509Identity;
+import org.hyperledger.fabric.gateway.impl.identity.IdemixIdentityProvider;
 import org.hyperledger.fabric.gateway.impl.identity.X509IdentityProvider;
 import org.hyperledger.fabric.gateway.spi.CommitHandlerFactory;
 import org.hyperledger.fabric.gateway.spi.QueryHandlerFactory;
 import org.hyperledger.fabric.sdk.Channel;
 import org.hyperledger.fabric.sdk.Channel.PeerOptions;
+import org.hyperledger.fabric.sdk.Enrollment;
 import org.hyperledger.fabric.sdk.HFClient;
 import org.hyperledger.fabric.sdk.NetworkConfig;
 import org.hyperledger.fabric.sdk.Peer;
@@ -30,6 +33,8 @@ import org.hyperledger.fabric.sdk.User;
 import org.hyperledger.fabric.sdk.exception.CryptoException;
 import org.hyperledger.fabric.sdk.exception.InvalidArgumentException;
 import org.hyperledger.fabric.sdk.exception.NetworkConfigurationException;
+import org.hyperledger.fabric.sdk.identity.IdemixEnrollment;
+import org.hyperledger.fabric.sdk.identity.X509Enrollment;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
@@ -121,7 +126,7 @@ public final class GatewayImpl implements Gateway {
             if (null == identity) {
                 throw new IllegalArgumentException("Identity must not be null");
             }
-            if (!(identity instanceof X509Identity)) {
+            if (!(identity instanceof X509Identity || identity instanceof IdemixIdentity)) {
                 throw new IllegalArgumentException("No provider for identity type: " + identity.getClass().getName());
             }
             this.identity = identity;
@@ -175,8 +180,10 @@ public final class GatewayImpl implements Gateway {
             this.networkConfig = null;
 
             User user = client.getUserContext();
+            Enrollment enrollment = user.getEnrollment();
             try {
-                this.identity = Identities.newX509Identity(user.getMspId(), user.getEnrollment());
+                this.identity = (enrollment instanceof X509Enrollment) ? Identities.newX509Identity(user.getMspId(), user.getEnrollment())
+                        : ((enrollment instanceof IdemixEnrollment) ? Identities.newIdemixIdentity(user.getMspId(), user.getEnrollment()) : null);
             } catch (CertificateException e) {
                 throw new GatewayRuntimeException(e);
             }
@@ -192,7 +199,16 @@ public final class GatewayImpl implements Gateway {
 
             this.client = HFClient.createNewInstance();
             // Hard-coded type for now but needs to get appropriate provider from wallet (or registry)
-            X509IdentityProvider.INSTANCE.setUserContext(client, identity, "gateway");
+            if (identity instanceof X509Identity) {
+                LOG.info("Creating HFClient for X509 Identity");
+                X509IdentityProvider.INSTANCE.setUserContext(client, identity, "gateway");
+            } else if (identity instanceof IdemixIdentity) {
+                LOG.info("Creating HFClient for Idemix Identity");
+                IdemixIdentityProvider.INSTANCE.setUserContext(client, identity, "gateway");
+            } else {
+                LOG.info("Identity Type should be either X.509 or idemix for creating client");
+                throw new GatewayRuntimeException("Identity Type should be either X.509 or idemix for creating client");
+            }
         }
     }
 

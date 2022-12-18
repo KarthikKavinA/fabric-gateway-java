@@ -28,8 +28,10 @@ import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.openssl.jcajce.JcaPKCS8Generator;
 import org.bouncycastle.util.io.pem.PemGenerationException;
 import org.bouncycastle.util.io.pem.PemObject;
+import org.hyperledger.fabric.gateway.impl.identity.IdemixIdentityImpl;
 import org.hyperledger.fabric.gateway.impl.identity.X509IdentityImpl;
 import org.hyperledger.fabric.sdk.Enrollment;
+import org.hyperledger.fabric.sdk.identity.IdemixEnrollmentSerialized;
 
 /**
  * This class consists exclusively of static methods used to create and operate on identity information.
@@ -57,6 +59,37 @@ public final class Identities {
      */
     public static X509Identity newX509Identity(final String mspId, final Enrollment enrollment) throws CertificateException {
         return newX509Identity(mspId, readX509Certificate(enrollment.getCert()), enrollment.getKey());
+    }
+    
+    /**
+     * @param ipk Idemix Issuer Public Key Serialized String.
+     * @param rPk Revocation Public Key Serialized String.
+     * @param mspId MSPID.
+     * @param sk Secret Key Serialized String.
+     * @param cred Idemix Credential Serialized String.
+     * @param cri Credential Revocation Information Serialized String.
+     * @param ou OU - Organizational Unit Identifier.
+     * @param rolemask RoleMask String.
+     * @return An Identity.
+     */
+    public static IdemixIdentity newIdemixIdentity(final String ipk, final String rPk, final String mspId, final String sk, final String cred, final String cri, final String ou, final String rolemask) {
+        return new IdemixIdentityImpl(ipk, rPk, mspId, sk, cred, cri, ou, rolemask);
+    }
+
+    /**
+     * Create a new Idemix identity from an enrollment returned from a Certificate Authority.
+     * @param mspId Member Services Provider identifier.
+     * @param enrollment Identity credentials.
+     * @return An identity.
+     * @throws CertificateException if the certificate is invalid.
+     * @throws NullPointerException if any of the arguments are null.
+     */
+    public static IdemixIdentity newIdemixIdentity(final String mspId, final Enrollment enrollment) throws CertificateException {
+
+        final IdemixEnrollmentSerialized idemixEnrollment = (IdemixEnrollmentSerialized) enrollment;
+        return newIdemixIdentity(idemixEnrollment.getIpk(), idemixEnrollment.getRevocationPk(),
+        idemixEnrollment.getMspId(), idemixEnrollment.getSk(), idemixEnrollment.getCred(),
+        idemixEnrollment.getCri(), idemixEnrollment.getOu(), idemixEnrollment.getRoleMask());
     }
 
     /**
